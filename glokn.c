@@ -34,7 +34,6 @@ float a2f(char *s){
 	else return atof(s);
 }
 void drawWav(float lamda,float phase,float g0,float g180,int bin){
-  fprintf(stderr,"Wav %f %f %f %f %d\n",lamda,phase,g0,g180,bin);
 	for(int i=0;i<width;i++){
 		float lx=px2gl(i);
 		float ip=(1+cos(2*M_PI*(lx/lamda-phase)))/2;
@@ -141,7 +140,6 @@ int main(void){
   socklen_t clilen = sizeof(cli_addr);
 
 	double tsch=(float)glfwGetTime();
-  int loop=0;
   static char buffer[20000];
   int rdcount;
   int newsockfd;
@@ -149,15 +147,11 @@ int main(void){
   double gltm;
   int seq=0;
 LOOP:
-  if(glfwWindowShouldClose(window)){
-    glfwDestroyWindow(window);
-  	glfwTerminate();
-    exit(EXIT_SUCCESS);
-  }
+  if(glfwWindowShouldClose(window)) goto QUIT;
   newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
   if(newsockfd<0){
     perror("ERROR on accept");
-    goto LOOP;
+    goto QUIT;
   }
 READ:
   fprintf(stderr,"READ\n");
@@ -165,21 +159,22 @@ READ:
   rdcount=read(newsockfd,buffer,20000);
   if(rdcount<=0){
     perror("read socket error");
-    goto LOOP;
+    goto QUIT;
   }
   cparser_set(buffer);
+  seq=0;
   arg=NULL;
 PARSE:
 	arg=cparser_next();
 	if(arg==NULL) goto READ;
-	if(loop==0){
-	  glClearColor(0.f,0.f,0.f,1.f);
+  if(seq==0){
+  	glClearColor(0.f,0.f,0.f,1.f);
 	  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 	  glDisable(GL_LIGHTING);
-		glLoadIdentity();
-		glRotatef(0.f,1.f,0.f,0.f);
-	}
-  fprintf(stderr,"CMD %c\n",arg[0][0]);
+	  glLoadIdentity();
+	  glRotatef(0.f,1.f,0.f,0.f);
+  }
+  seq++;
 	switch(arg[0][0]){
 	case 'W':
 	  drawWav(a2f(arg[1]),a2f(arg[2]),a2f(arg[3]),a2f(arg[4]),strcmp(arg[5],"false"));
@@ -197,18 +192,22 @@ PARSE:
   goto PARSE;
 RESPONSE:
 	fprintf(stderr,"Glfw swap buffer\n");
+  seq=0;
 	glfwSwapBuffers(window);
 	gltm=glfwGetTime();
 	sprintf(buffer,"%f\n",(gltm-tsch)*1000);
   rdcount=write(newsockfd,buffer,strlen(buffer));
-	fprintf(stderr,"%d %s\n",seq++,buffer);
+	fprintf(stderr,"tm=%s\n",buffer);
 	tsch=gltm;
   if(rdcount<=0){
     perror("write socket error");
-    goto LOOP;
+    goto QUIT;
   }
 //  glfwPollEvents();
   goto PARSE;
 QUIT:
   if(sockfd>0) close(sockfd);
+	glfwDestroyWindow(window);
+	glfwTerminate();
+	exit(EXIT_SUCCESS);
 }
