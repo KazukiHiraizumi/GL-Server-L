@@ -34,6 +34,7 @@ float a2f(char *s){
 	else return atof(s);
 }
 void drawWav(float lamda,float phase,float g0,float g180,int bin){
+  fprintf(stderr,"Wav %f %f %f %f %d\n",lamda,phase,g0,g180,bin);
 	for(int i=0;i<width;i++){
 		float lx=px2gl(i);
 		float ip=(1+cos(2*M_PI*(lx/lamda-phase)))/2;
@@ -141,29 +142,36 @@ int main(void){
 
 	double tsch=(float)glfwGetTime();
   int loop=0;
+  static char buffer[20000];
+  int rdcount;
+  int newsockfd;
+  char **arg=NULL;
+  double gltm;
+  int seq=0;
 LOOP:
   if(glfwWindowShouldClose(window)){
     glfwDestroyWindow(window);
   	glfwTerminate();
     exit(EXIT_SUCCESS);
   }
-  int newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
+  newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
   if(newsockfd<0){
     perror("ERROR on accept");
     goto LOOP;
   }
 READ:
-  char buffer[512];
-  int n=read(newsockfd,buffer,512);
-  if(n<=0){
+  fprintf(stderr,"READ\n");
+  memset(buffer,0,20000);
+  rdcount=read(newsockfd,buffer,20000);
+  if(rdcount<=0){
     perror("read socket error");
     goto LOOP;
   }
   cparser_set(buffer);
-  char **arg=NULL;
+  arg=NULL;
 PARSE:
 	arg=cparser_next();
-	if(arg==NULL) goto RESPONSE;
+	if(arg==NULL) goto READ;
 	if(loop==0){
 	  glClearColor(0.f,0.f,0.f,1.f);
 	  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
@@ -171,7 +179,7 @@ PARSE:
 		glLoadIdentity();
 		glRotatef(0.f,1.f,0.f,0.f);
 	}
-	fprintf(stderr,"%s %s %s %s %s\n",arg[0],arg[1],arg[2],arg[3],arg[4]);
+  fprintf(stderr,"CMD %c\n",arg[0][0]);
 	switch(arg[0][0]){
 	case 'W':
 	  drawWav(a2f(arg[1]),a2f(arg[2]),a2f(arg[3]),a2f(arg[4]),strcmp(arg[5],"false"));
@@ -181,20 +189,26 @@ PARSE:
 	  break;
 	case 'B':
 	  drawBand(a2f(arg[1]),a2f(arg[2]));
+    break;
+	case 'G':
+	  goto RESPONSE;
 	  break;
 	}
   goto PARSE;
 RESPONSE:
 	fprintf(stderr,"Glfw swap buffer\n");
 	glfwSwapBuffers(window);
-	double t=glfwGetTime();
-	sprintf(buffer,"%f\n",(t-tsch)*1000);
-  n=write(newsockfd,buffer,strlen(buffer));
-	tsch=t;
-  if(n<=0){
+	gltm=glfwGetTime();
+	sprintf(buffer,"%f\n",(gltm-tsch)*1000);
+  rdcount=write(newsockfd,buffer,strlen(buffer));
+	fprintf(stderr,"%d %s\n",seq++,buffer);
+	tsch=gltm;
+  if(rdcount<=0){
     perror("write socket error");
     goto LOOP;
   }
-  goto READ;
-//		glfwPollEvents();
+//  glfwPollEvents();
+  goto PARSE;
+QUIT:
+  if(sockfd>0) close(sockfd);
 }

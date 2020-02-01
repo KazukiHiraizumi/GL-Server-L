@@ -6,25 +6,36 @@
 #include "cparser.h"
 
 static char *cparsed[16];
-static char buffer[512];
+static char buffer[20000];
 static char *s1;
 static int cn=0,pn=0;
+static char *eos;
+static int go=0;
 
 void cparser_set(char *f){
   strcpy(buffer,f);
 	s1=buffer;
+  eos=buffer+strlen(buffer);
 	cn=pn=0;
 }
 char **cparser_next(void){
   for(;;){
     int a=*s1;
-    if(iscntrl(a)){
+    if(go){
+      cparsed[0]="G";
+      cn=1;
+      go=0;
+      break;
+    }
+    else if(s1>=eos) return NULL;
+    else if(iscntrl(a)){
       if(cn>0){
         *s1=0;
+        go=1;
         s1++;
         break;
       }
-      else return NULL;
+      else s1++;
     }
     else if(a==';'){
 			if(cn>0){
@@ -46,6 +57,11 @@ char **cparser_next(void){
 			s1++;
 		}
 	}
+  fprintf(stderr,"parsed ");
+  for(int i=0;i<cn;i++){
+    fprintf(stderr,"%s ",cparsed[i]);
+  }
+  fprintf(stderr,"end\n");
 	for(int i=cn;i<16;i++){
 		cparsed[i]=NULL;
 	}
